@@ -25,14 +25,61 @@ FetchContent_Declare(
     GIT_TAG v3.11.3
 )
 
-FetchContent_MakeAvailable(cli11 nlohmann_json)
+# GLM — header-only math library for vectors and matrices
+FetchContent_Declare(
+    glm
+    GIT_REPOSITORY https://github.com/g-truc/glm.git
+    GIT_TAG 1.0.1
+)
+
+FetchContent_MakeAvailable(cli11 nlohmann_json glm)
 
 # ltc_core library
 add_library(ltc_core STATIC
     src/core/Version.cpp
+    src/core/Math.cpp
+    src/core/Sampling.cpp
     src/dds/DDSReader.cpp
+    src/brdf/GGX.cpp
+    src/brdf/Beckmann.cpp
+    src/brdf/DisneyDiffuse.cpp
+    src/brdf/BRDFRegistry.cpp
+    src/fitting/LTC.cpp
+    src/fitting/BRDFIntegration.cpp
+    src/fitting/ErrorFunction.cpp
+    src/fitting/NelderMead.cpp
+    src/fitting/LTCFitter.cpp
+    src/fitting/AdaptiveSampling.cpp
+    src/fitting/InitialGuessStrategy.cpp
+    src/fitting/FittingDiagnostics.cpp
+    src/fitting/MultiStartOptimizer.cpp
+    src/fitting/QualityFitter.cpp
+    src/lut/LUT.cpp
+    src/lut/ParameterGrid.cpp
+    src/lut/JobScheduler.cpp
+    src/lut/Checkpoint.cpp
+    src/lut/LUTValidation.cpp
+    src/lut/LUTGenerator.cpp
+    src/lut/RefinementPolicy.cpp
+    src/lut/LUTRefinement.cpp
+    src/benchmark/FittingBenchmark.cpp
+    src/benchmark/GenerationBenchmark.cpp
+    src/benchmark/BenchmarkReport.cpp
+    src/dds/Float16.cpp
+    src/dds/DDSWriter.cpp
+    src/export/LUTPacking.cpp
+    src/export/LUTExporter.cpp
+    src/validation/AreaLight.cpp
+    src/validation/NumericalIntegrator.cpp
+    src/validation/LTCPolygonIntegrator.cpp
+    src/validation/DistributionValidation.cpp
+    src/validation/ReferenceComparison.cpp
+    src/validation/LightingValidation.cpp
+    src/validation/ValidationRunner.cpp
+    src/validation/ValidationReport.cpp
 )
 target_include_directories(ltc_core PUBLIC include)
+target_link_libraries(ltc_core PUBLIC glm::glm nlohmann_json::nlohmann_json)
 ltc_set_compiler_options(ltc_core)
 
 # ltcgen executable

@@ -1,0 +1,7 @@
+CompileFlags:
+  Add:
+    - "-std=c++20"
+    - "-ID:/Projects/Cpp/LTC/include"
+    - "-ID:/Projects/Cpp/LTC/build/_deps/glm-src"
+    - "-ID:/Projects/Cpp/LTC/build/_deps/cli11-src/include"
+    - "-ID:/Projects/Cpp/LTC/build/_deps/nlohmann_json-src/include"

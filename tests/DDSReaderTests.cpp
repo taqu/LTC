@@ -19,11 +19,11 @@ static constexpr uint32_t DDPF_FOURCC                           = 0x4u;
 static constexpr uint32_t FOURCC_DX10                           = 0x30315844u;
 static constexpr uint32_t D3D10_RESOURCE_DIMENSION_TEXTURE2D    = 3u;
 static constexpr uint32_t DXGI_FORMAT_R16G16B16A16_FLOAT        = 10u;
-static constexpr uint32_t DXGI_FORMAT_R32G32B32A32_FLOAT        = 2u;
-static constexpr uint32_t DXGI_FORMAT_R32G32_FLOAT              = 16u;
-static constexpr uint32_t DXGI_FORMAT_R16G16_FLOAT              = 34u;
-static constexpr uint32_t D3DFMT_A16B16G16R16F                  = 113u;
-static constexpr uint32_t D3DFMT_G16R16F                        = 112u;
+[[maybe_unused]] static constexpr uint32_t DXGI_FORMAT_R32G32B32A32_FLOAT = 2u;
+[[maybe_unused]] static constexpr uint32_t DXGI_FORMAT_R32G32_FLOAT      = 16u;
+[[maybe_unused]] static constexpr uint32_t DXGI_FORMAT_R16G16_FLOAT      = 34u;
+static constexpr uint32_t D3DFMT_A16B16G16R16F                            = 113u;
+[[maybe_unused]] static constexpr uint32_t D3DFMT_G16R16F                = 112u;
 
 #pragma pack(push, 1)
 struct TestDDSPixelFormat {
