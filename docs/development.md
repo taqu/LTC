@@ -3,116 +3,132 @@
 ## Prerequisites
 
 | Tool | Minimum version | Notes |
-|------|----------------|-------|
+|------|-----------------|-------|
 | CMake | 3.21 | Required for `FetchContent` and presets |
-| C++ compiler | C++20 support | MSVC 19.29+ / GCC 11+ / Clang 13+ |
-| Git | Any recent | Needed by FetchContent for dependencies |
+| C++ compiler | C++20 | MSVC 19.29+ / GCC 11+ / Clang 13+ |
+| Git | Any recent version | Used by `FetchContent` to download dependencies |
 
-On Windows, Visual Studio 2022 (any edition) is the recommended toolchain.
+On Windows, Visual Studio 2022 (any edition) is the recommended and tested toolchain. The Linux presets have not been verified for this release.
 
 ## Repository Layout
 
-```
-LTCGenerator/
-├── cmake/                  # CMake helper modules
-├── docs/                   # Documentation
-│   └── work/               # Planning documents (do not edit)
-├── examples/               # Usage examples
-├── include/ltc/            # Public headers (installed with the library)
-├── reference/              # Placeholder for reference DDS textures
+```text
+├── cmake/               # CompilerOptions.cmake (ltc_set_compiler_options)
+├── docs/                # User and developer documentation
+│   └── work/            # Planning documents (do not edit)
+├── examples/            # Usage examples
+├── include/ltc/         # Public headers of ltc_core
+├── reference/           # Placeholder for external reference DDS textures (not committed)
 ├── src/
-│   ├── cli/                # ltcgen executable source
-│   ├── core/               # Shared utilities (Version)
-│   └── dds/                # DDS reader implementation
-└── tests/                  # GTest unit and integration tests
+│   ├── benchmark/       # benchmark subcommands
+│   ├── brdf/            # GGX, Beckmann, Disney Diffuse, BRDFRegistry
+│   ├── cli/             # ltcgen entry point (main.cpp)
+│   ├── core/            # Version, math, sampling helpers
+│   ├── dds/             # DDS reader/writer, FP16 conversion
+│   ├── export/          # LUT packing and DDS export
+│   ├── fitting/         # LTC model, error function, Nelder–Mead, Quality fitter
+│   ├── lut/             # Parameter grid, generator, scheduler, checkpoint, refinement
+│   └── validation/      # Distribution, reference, and area-light validation
+└── tests/               # GoogleTest suite (ltc_tests)
 ```
 
+See [architecture.md](architecture.md) for component responsibilities.
+
 ## Building
+
+### Presets
+
+| Preset | Generator | Build directory |
+|--------|-----------|-----------------|
+| `windows-msvc-debug` | Visual Studio 17 2022 | `build/msvc-debug` |
+| `windows-msvc-release` | Visual Studio 17 2022 | `build/msvc-release` |
+| `linux-debug` | Default generator | `build/linux-debug` |
+| `linux-release` | Default generator | `build/linux-release` |
+
+All presets set `LTC_BUILD_TESTS=ON`.
 
 ### Windows (Visual Studio 2022)
 
 ```powershell
-# Configure (downloads CLI11, nlohmann/json, GoogleTest via FetchContent)
-cmake --preset windows-msvc-debug
-
-# Build
-cmake --build build/msvc-debug
-
-# Run tests
-ctest --test-dir build/msvc-debug --output-on-failure
+cmake --preset windows-msvc-release
+cmake --build build/msvc-release --config Release
+ctest --test-dir build/msvc-release -C Release --output-on-failure
 ```
 
-For a release build, replace `windows-msvc-debug` with `windows-msvc-release`.
+Visual Studio is a multi-configuration generator. The preset's `CMAKE_BUILD_TYPE` is ignored, so pass `--config` to `cmake --build` and `-C` to `ctest`. Without them, a `Debug` build is produced. Outputs are written to a per-configuration subdirectory:
+
+- `build/msvc-release/Release/ltcgen.exe`
+- `build/msvc-release/tests/Release/ltc_tests.exe`
 
 ### Linux / macOS
 
 ```bash
-cmake --preset linux-debug
-cmake --build build/linux-debug
-ctest --test-dir build/linux-debug --output-on-failure
+cmake --preset linux-release
+cmake --build build/linux-release
+ctest --test-dir build/linux-release --output-on-failure
 ```
 
-### Manual configure (no presets)
+These presets use a single-configuration generator, so the outputs are `build/linux-release/ltcgen` and `build/linux-release/tests/ltc_tests`.
+
+### Without presets
 
 ```bash
-cmake -B build -DCMAKE_BUILD_TYPE=Debug -DLTC_BUILD_TESTS=ON
-cmake --build build
-ctest --test-dir build --output-on-failure
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DLTC_BUILD_TESTS=ON
+cmake --build build --config Release
+ctest --test-dir build -C Release --output-on-failure
 ```
+
+Set `-DLTC_BUILD_TESTS=OFF` to skip downloading GoogleTest and building the test suite.
 
 ## Dependencies
 
-All dependencies are fetched automatically by CMake's `FetchContent` on first configure:
+All dependencies are fetched by `FetchContent` on the first configure:
 
 | Library | Version | Use |
 |---------|---------|-----|
-| [CLI11](https://github.com/CLIUtils/CLI11) | v2.4.2 | Command-line argument parsing |
-| [nlohmann/json](https://github.com/nlohmann/json) | v3.11.3 | JSON serialization |
-| [GoogleTest](https://github.com/google/googletest) | v1.15.2 | Unit and integration tests |
+| [CLI11](https://github.com/CLIUtils/CLI11) | v2.4.2 | Command-line parsing (`ltcgen` only) |
+| [nlohmann/json](https://github.com/nlohmann/json) | v3.11.3 | JSON output and reports |
+| [GLM](https://github.com/g-truc/glm) | 1.0.1 | Vector and matrix math |
+| [GoogleTest](https://github.com/google/googletest) | v1.15.2 | Tests (only when `LTC_BUILD_TESTS=ON`) |
 
-An internet connection is required on first build. After the initial fetch, CMake caches the sources in the build directory.
+An internet connection is required on the first configure. After that, the sources are cached in `<build>/_deps`.
 
 ## Compiler Options
 
-The `ltc_set_compiler_options()` function (defined in `cmake/CompilerOptions.cmake`) applies:
+`ltc_set_compiler_options()` (in `cmake/CompilerOptions.cmake`) applies:
 
-**MSVC:**
-- `/W4 /WX` — high warning level, warnings as errors
-- `/permissive-` — strict standard conformance
-- `/Zc:__cplusplus` — correct `__cplusplus` macro value
-- `/utf-8` — source and execution charset UTF-8
-- `_CRT_SECURE_NO_WARNINGS`, `NOMINMAX`, `WIN32_LEAN_AND_MEAN` — common Windows suppression macros
+- **MSVC:** `/W4 /WX /permissive- /Zc:__cplusplus /utf-8`, `/O2` in Release, plus `_CRT_SECURE_NO_WARNINGS`, `NOMINMAX`, and `WIN32_LEAN_AND_MEAN`
+- **GCC / Clang:** `-Wall -Wextra -Wpedantic -Werror`, `-O2` in Release, `-g` in Debug
 
-**GCC / Clang:**
-- `-Wall -Wextra -Wpedantic -Werror` — high warning level, warnings as errors
+Warnings are treated as errors.
 
 ## Running Tests
 
-After building, tests can be run individually:
-
 ```bash
 # All tests
-ctest --test-dir build/msvc-debug --output-on-failure
+ctest --test-dir build/msvc-release -C Release --output-on-failure
 
-# Specific test binary
-build/msvc-debug/tests/Debug/ltc_tests.exe --gtest_filter="FP16Test.*"
+# Filter by test name
+build/msvc-release/tests/Release/ltc_tests.exe --gtest_filter="FP16Test.*"
 ```
 
-The `CLITests` suite invokes the `ltcgen` executable as a subprocess.  The path is baked in at compile time via the `LTCGEN_EXECUTABLE` macro defined in `tests/CMakeLists.txt`.
+`CLITests` runs the `ltcgen` executable as a subprocess. Its path is baked in at compile time through the `LTCGEN_EXECUTABLE` macro (`tests/CMakeLists.txt`).
 
-## Adding New Features
+Some tests run small LUT generations. Use a Release build for faster test runs.
 
-1. Add public types/interfaces to `include/ltc/`.
-2. Implement in `src/core/` or `src/dds/` as appropriate.
-3. Expose via the CLI in `src/cli/main.cpp`.
-4. Add unit tests to `tests/DDSReaderTests.cpp` and CLI integration tests to `tests/CLITests.cpp`.
-5. Update `docs/architecture.md` and `docs/dds-format.md` as needed.
+## Adding Features
+
+1. Add public types and interfaces to `include/ltc/`, and the implementation under the matching `src/` subdirectory.
+2. Add new source files to the `ltc_core` target in `CMakeLists.txt`.
+3. Expose CLI options in `src/cli/main.cpp`.
+4. Add unit tests in `tests/` and register them in `tests/CMakeLists.txt`. Add CLI tests to `tests/CLITests.cpp`.
+5. Update the README and the relevant document in `docs/`.
+
+To add a BRDF, see [brdf-extension.md](brdf-extension.md).
 
 ## Code Style
 
-- C++20, no extensions (`CMAKE_CXX_EXTENSIONS OFF`).
-- `std::memcpy` for type punning; never `reinterpret_cast` on file data.
-- All errors reported as `ltc::DDSError` exceptions with descriptive messages.
-- No global or static mutable state.
-- `std::filesystem::path` for all file paths.
-- `std::ifstream` with `std::ios::binary` for all file I/O.
+- C++20 without compiler extensions (`CMAKE_CXX_EXTENSIONS OFF`).
+- Use `std::memcpy` for type punning, never `reinterpret_cast` on file data.
+- No global or static mutable state. BRDFs and fitters must be safe to call from multiple threads.
+- Use `std::filesystem::path` for paths and binary-mode streams for file I/O.

@@ -2,6 +2,8 @@
 
 This document describes the subset of the DirectDraw Surface (DDS) format that `ltc_core` reads.
 
+`DDSWriter` (used by `ltcgen export`) always writes the DX10 extended-header form of the same four formats: a single 2D texture with one mip level. For the content of the exported LUT textures, see [lut-packing.md](lut-packing.md).
+
 ## File Layout
 
 ```

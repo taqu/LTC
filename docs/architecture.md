@@ -1,55 +1,48 @@
 # Architecture
 
-## Overview
+The project has two build targets: a static library, `ltc_core`, which contains all fitting, LUT, DDS, and validation code, and a thin CLI executable, `ltcgen` (`src/cli/main.cpp`), built on CLI11.
 
-The LTC LUT Generator is structured as a reusable library (`ltc_core`) and a CLI tool (`ltcgen`).
+## Data Flow
 
-```
-LTCGenerator/
-├── include/ltc/        # Public headers
-│   ├── Version.h       # Version constants and string
-│   ├── DDS.h           # DDS types: DDSFormat, DDSMetadata, Pixel, format helpers
-│   └── DDSReader.h     # DDSReader, DDSError, ChannelStats, ImageStats
-├── src/
-│   ├── core/
-│   │   └── Version.cpp # Version::string() implementation
-│   ├── dds/
-│   │   └── DDSReader.cpp  # DDS parsing and pixel decoding
-│   └── cli/
-│       └── main.cpp    # CLI entry point (CLI11 + nlohmann/json)
-├── tests/
-│   ├── DDSReaderTests.cpp  # Unit tests for DDSReader and fp16 conversion
-│   └── CLITests.cpp        # Integration tests via subprocess
-└── cmake/
-    └── CompilerOptions.cmake  # ltc_set_compiler_options() function
+```text
+BRDF (IBRDF) ──► LTCFitter / QualityFitter ──► LUTGenerator ──► .ltcbin (Checkpoint)
+                                                     │                    │
+                                     ParameterGrid, JobScheduler          ▼
+                                                                    LUTExporter ──► DDSWriter ──► *.dds
+                                                                          │
+                                       ValidationRunner ◄─────────────────┘
 ```
 
-## Component Responsibilities
+## Components
 
-### ltc_core (static library)
+| Area | Headers (`include/ltc/`) | Responsibility |
+|------|--------------------------|----------------|
+| BRDFs | `BRDF.h`, `BRDFCapabilities.h`, `GGX.h`, `Beckmann.h`, `DisneyDiffuse.h`, `BRDFRegistry.h` | `IBRDF` interface, built-in models, name → factory registry |
+| LTC model | `LTC.h` | LTC matrix (`m11`, `m22`, `m13`), evaluation and sampling |
+| Fitting | `BRDFIntegration.h`, `ErrorFunction.h`, `NelderMead.h`, `Fitter.h`, `FittingConfig.h`, `QualityFitting.h`, `AdaptiveSampling.h`, `InitialGuessStrategy.h`, `FittingDiagnostics.h` | BRDF moment integration, MIS error, Reference and Quality fitters |
+| LUT | `ParameterGrid.h`, `LUT.h`, `LUTGenerator.h`, `JobScheduler.h`, `GenerationConfig.h`, `GenerationProgress.h`, `Checkpoint.h`, `LUTValidation.h`, `LUTRefinement.h`, `RefinementPolicy.h` | Grid parameterization, multithreaded generation with warm-started initial guesses, `.ltcbin` I/O, summary checks, refinement API |
+| Export | `LUTPacking.h`, `LUTExporter.h`, `TextureData.h`, `Float16.h`, `DDSWriter.h` | Matrix/amplitude packing, FP16/FP32 encoding, DDS writing |
+| DDS reading | `DDS.h`, `DDSReader.h` | Metadata, pixel, and statistics for `inspect` |
+| Validation | `Validation.h`, `ValidationConfig.h`, `ValidationReport.h`, `DistributionValidation.h`, `ReferenceComparison.h`, `AreaLight.h`, `LTCPolygonIntegrator.h`, `NumericalIntegrator.h` | Distribution error, reference texture comparison, area-light integration, JSON reports |
+| Benchmarks | `Benchmark.h` | Fit, generation, suite, and scaling benchmarks |
 
-- **Version**: single source of truth for the version string.
-- **DDSReader**: reads DDS files in binary mode, parses headers (legacy FourCC and DX10 extended), decodes pixels, and computes per-channel statistics.  Throws `DDSError` for all error conditions.
-- **DDS types** (DDS.h): plain data types (`DDSMetadata`, `Pixel`, `DDSFormat`) and three free functions (`formatToString`, `formatChannelCount`, `formatBytesPerPixel`).
+## CLI Subcommands
 
-### ltcgen (executable)
+| Subcommand | Library entry point |
+|------------|---------------------|
+| `inspect` | `DDSReader` |
+| `list-brdfs` | `BRDFRegistry::createDefault()` |
+| `fit` | `LTCFitter` |
+| `generate` | `LUTGenerator`, `Checkpoint`, `LUTValidator` |
+| `export` | `Checkpoint::load`, `LUTExporter` |
+| `validate …` | `ValidationRunner` |
+| `benchmark …` | `runFitBenchmark`, `runGenerationBenchmark`, `runSuiteBenchmark`, `runScalingBenchmark` |
 
-Thin CLI wrapper built with CLI11.  Subcommands:
-
-| Subcommand | Function |
-|------------|----------|
-| `inspect`  | Print DDS metadata, optionally a pixel, optionally per-channel stats |
-
-Output is either human-readable text (default) or JSON (`--json`).  All errors go to stderr; the process exits non-zero on any error.
-
-### Tests
-
-- `DDSReaderTests.cpp` — pure unit tests that create synthetic DDS files in temp directories and validate parsing, pixel reads, statistics, error handling, and fp16 conversion.
-- `CLITests.cpp` — integration tests that invoke the `ltcgen` binary as a subprocess and check exit codes and output strings.
+Output is either human-readable text or JSON. Errors go to stderr, and the process exits with a non-zero code.
 
 ## Design Principles
 
-- **No global state**: all functions are static methods or free functions.
-- **Fail fast**: every file read is bounds-checked before it happens; overflow is detected before multiplying dimensions.
-- **Safe type punning**: `std::memcpy` is used throughout instead of `reinterpret_cast` on raw file bytes.
-- **Cross-platform**: `std::filesystem` and `std::ifstream` are used exclusively; no platform-specific I/O calls appear in the library code.
+- **No global state.** BRDFs and fitters are stateless and can be called concurrently.
+- **Fail fast.** File reads are bounds-checked, and size overflows are detected before allocation.
+- **Safe type punning.** File data is decoded with `std::memcpy`, not `reinterpret_cast`.
+- **Portable I/O.** File access uses only `std::filesystem` and standard streams, with no platform-specific calls in the library code.
