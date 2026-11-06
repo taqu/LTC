@@ -70,3 +70,4 @@ Testing/
 build
 build_ninja
 .claude
+*.dds

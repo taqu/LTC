@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 3.21)
-project(LTCGenerator VERSION 0.1.0 LANGUAGES CXX)
+
+set(PROJECT_NAME ltc)
+project(${PROJECT_NAME} VERSION 0.1.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -8,7 +10,6 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 option(LTC_BUILD_TESTS "Build LTC Generator tests" ON)
 
-include(cmake/CompilerOptions.cmake)
 include(FetchContent)
 
 # CLI11
@@ -18,12 +19,12 @@ FetchContent_Declare(
     GIT_TAG v2.4.2
 )
 
-# nlohmann/json
-FetchContent_Declare(
-    nlohmann_json
-    GIT_REPOSITORY https://github.com/nlohmann/json.git
-    GIT_TAG v3.11.3
-)
+# DirectXTex
+#FetchContent_Declare(
+#    DirectXTex
+#    GIT_REPOSITORY https://github.com/microsoft/DirectXTex.git
+#    GIT_TAG may2026
+#)
 
 # GLM — header-only math library for vectors and matrices
 FetchContent_Declare(
@@ -32,62 +33,56 @@ FetchContent_Declare(
     GIT_TAG 1.0.1
 )
 
-FetchContent_MakeAvailable(cli11 nlohmann_json glm)
+FetchContent_MakeAvailable(cli11 glm)
 
-# ltc_core library
-add_library(ltc_core STATIC
-    src/core/Version.cpp
-    src/core/Math.cpp
-    src/core/Sampling.cpp
-    src/dds/DDSReader.cpp
-    src/brdf/GGX.cpp
-    src/brdf/Beckmann.cpp
-    src/brdf/DisneyDiffuse.cpp
-    src/brdf/BRDFRegistry.cpp
-    src/fitting/LTC.cpp
-    src/fitting/BRDFIntegration.cpp
-    src/fitting/ErrorFunction.cpp
-    src/fitting/NelderMead.cpp
-    src/fitting/LTCFitter.cpp
-    src/fitting/AdaptiveSampling.cpp
-    src/fitting/InitialGuessStrategy.cpp
-    src/fitting/FittingDiagnostics.cpp
-    src/fitting/MultiStartOptimizer.cpp
-    src/fitting/QualityFitter.cpp
-    src/lut/LUT.cpp
-    src/lut/ParameterGrid.cpp
-    src/lut/JobScheduler.cpp
-    src/lut/Checkpoint.cpp
-    src/lut/LUTValidation.cpp
-    src/lut/LUTGenerator.cpp
-    src/lut/RefinementPolicy.cpp
-    src/lut/LUTRefinement.cpp
-    src/benchmark/FittingBenchmark.cpp
-    src/benchmark/GenerationBenchmark.cpp
-    src/benchmark/BenchmarkReport.cpp
-    src/dds/Float16.cpp
-    src/dds/DDSWriter.cpp
-    src/export/LUTPacking.cpp
-    src/export/LUTExporter.cpp
-    src/validation/AreaLight.cpp
-    src/validation/NumericalIntegrator.cpp
-    src/validation/LTCPolygonIntegrator.cpp
-    src/validation/DistributionValidation.cpp
-    src/validation/ReferenceComparison.cpp
-    src/validation/LightingValidation.cpp
-    src/validation/ValidationRunner.cpp
-    src/validation/ValidationReport.cpp
+set(HEADER_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/include")
+set(SOURCE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/src")
+include_directories(AFTER ${HEADER_ROOT})
+
+set(HEADERS
+    "${HEADER_ROOT}/fit/brdf.h"
+    "${HEADER_ROOT}/fit/dds.h"
+    "${HEADER_ROOT}/fit/float_to_half.h"
+    "${HEADER_ROOT}/fit/ltc.h"
+    "${HEADER_ROOT}/fit/nelder_mead.h"
 )
-target_include_directories(ltc_core PUBLIC include)
-target_link_libraries(ltc_core PUBLIC glm::glm nlohmann_json::nlohmann_json)
-ltc_set_compiler_options(ltc_core)
 
-# ltcgen executable
-add_executable(ltcgen src/cli/main.cpp)
-target_link_libraries(ltcgen PRIVATE ltc_core CLI11::CLI11 nlohmann_json::nlohmann_json)
-ltc_set_compiler_options(ltcgen)
+set(SOURCES
+    "${SOURCE_ROOT}/fit/dds.cpp"
+    "${SOURCE_ROOT}/fit/brdf.cpp"
+    "${SOURCE_ROOT}/fit/ltc.cpp"
+    "${SOURCE_ROOT}/fit/nelder_mead.cpp"
+    "${SOURCE_ROOT}/main.cpp"
+)
 
-if(LTC_BUILD_TESTS)
-    enable_testing()
-    add_subdirectory(tests)
+source_group("include" FILES ${HEADERS})
+source_group("src" FILES ${SOURCES})
+
+add_executable(${PROJECT_NAME} ${HEADERS} ${SOURCES})
+target_link_libraries(${PROJECT_NAME} PRIVATE CLI11::CLI11 glm::glm)
+if(MSVC)
+    target_compile_options(${PROJECT_NAME} PRIVATE
+        /W4
+        /WX
+        /permissive-
+        /Zc:__cplusplus
+        /utf-8
+        /arch:AVX2
+        $<$<CONFIG:Release>:/O2>
+        )
+    target_compile_definitions(${PROJECT_NAME} PRIVATE
+        _CRT_SECURE_NO_WARNINGS
+        NOMINMAX
+        WIN32_LEAN_AND_MEAN
+        )
+else()
+    target_compile_options(${PROJECT_NAME} PRIVATE
+        -Wall
+        -Wextra
+        -Wpedantic
+        -Werror
+        $<$<CONFIG:Release>:-O2>
+        $<$<CONFIG:Debug>:-g>
+        )
 endif()
+
